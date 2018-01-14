@@ -34,7 +34,7 @@ class Resident(models.Model):
 class ASA(models.Model):
 	asaID = models.CharField(max_length=10)
 	asalk = models.CharField(max_length=100)
-	Data = JSONField(default={'LicenseKey':'','timestamp':''})
+	Data = JSONField(default={})
 
 	def __str__(self):
 		return self.asaID

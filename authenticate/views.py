@@ -27,11 +27,11 @@ class AuthMain(APIView):
 				# Check if asalk matches that of asaObj
 				if asaObj.asalk == asalk:
 					# Request is Authentic
-					try:
+					#try:
 						response = prepare_response(etree.fromstring(request.body))
 						return Response(response)
-					except:
-						return Response('BAD_XML')
+					#except:
+					#	return Response('BAD_XML')
 				else:
 					# ASALK does not match
 					return Response('NM_ASALK')
