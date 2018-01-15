@@ -15,7 +15,23 @@ import os
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+######################### USER DEFINED VARIBALES #########################
+SESSION_DB_URL = "localhost"
+SESSION_DB_PORT = 6379
+SESSION_DB = 2
+
+EMAIL_USE_TLS = True
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_HOST_USER = 'niraadhaar.mailserver@gmail.com'
+EMAIL_HOST_PASSWORD = '!23ashish'
+
 PVT_DIR = "AUAPrivateKeyFiles"
+
+CERT_CHAIN_PATH = os.path.join(BASE_DIR,'NirAadhaar-INT-CA/certs/NirAadhaar-INT-CA.chain.pem')
+##########################################################################
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.0/howto/deployment/checklist/
 
@@ -100,6 +116,16 @@ DATABASES ={
 
 DATABASE_ROUTERS = ['authenticate.models.AuthenticateRouter']
 
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://localhost:6379/2",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient"
+        },
+        "KEY_PREFIX": "example"
+    }
+}
 # Password validation
 # https://docs.djangoproject.com/en/2.0/ref/settings/#auth-password-validators
 
