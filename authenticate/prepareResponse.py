@@ -310,20 +310,20 @@ def getResponseXML(AuthNodeData, ver, ac, asa):
 		ret = 'N'
 		err = '999' # Could not parse to XML
 		code = 'BAD_XML_AUTH_NODE'
-		return prepareResponse(None,ret,err,code)
+		return prepareResponseNode(None,ret,err,code)
 
 	if not (AuthNode.get('ver') == '1.6' == ver) :
 		ret = 'N'
 		err = '540' # Invalid Auth XML version
 		code = 'INVALID_AUTH_XML_VERSION'
-		return prepareResponse(AuthNode,ret,err,code)
+		return prepareResponseNode(AuthNode,ret,err,code)
 	else:
 		# If Authnode ac matches as of URL
 		if AuthNode.get('ac') != ac:
-			return prepareResponse(AuthNode,'N','999','MISMATCH_AC')
+			return prepareResponseNode(AuthNode,'N','999','MISMATCH_AC')
 		# If asa matches sa
 		if AuthNode.get('sa') != asa:
-			return prepareResponse(AuthNode,'N','999','MISMATCH_SA')
+			return prepareResponseNode(AuthNode,'N','999','MISMATCH_SA')
 		# Check if aadhaar number exists
 		try:
 			ResidentObj = Resident.objects.get(uid__exact = AuthNode.get('uid'))
@@ -331,26 +331,26 @@ def getResponseXML(AuthNodeData, ver, ac, asa):
 			ret = 'N'
 			err = '998' # invalid aadhaar number
 			code = 'INVALID_UID'
-			return prepareResponse(AuthNode,ret,err,code)
+			return prepareResponseNode(AuthNode,ret,err,code)
 
 	if not isSignatureValid(AuthNode.find('Signature').text):
 		ret = 'N'
 		err = '569' # Invalid signature
 		code = 'INVALID_SIGNATURE'
-		return prepareResponse(AuthNode,ret,err,code)
+		return prepareResponseNode(AuthNode,ret,err,code)
 
 	# Check if the request Skey's Ci has invalid ci
 	if not isCIValid(AuthNode):
 		ret = 'N'
 		err = '501' # Invalid CI of Skey
 		code = 'INVALID_CI_SKEY'
-		return prepareResponse(AuthNode,ret,err,code)
+		return prepareResponseNode(AuthNode,ret,err,code)
 
 	if not isLicenseValid(AuthNode):
 		ret = 'N'
 		err = '502'
 		code = 'INVALID_EXPIRED_LICENSE'
-		return prepareResponse(AuthNode,ret,err,code)
+		return prepareResponseNode(AuthNode,ret,err,code)
 
 	# If ci is valid then decrypt the skey
 	try:
@@ -359,7 +359,7 @@ def getResponseXML(AuthNodeData, ver, ac, asa):
 		ret = 'N'
 		err = '500' # Invalid encryption of Skey
 		code = "INVALID_ENCRYPTION_SKEY"
-		return prepareResponse(AuthNode,ret,err,code)
+		return prepareResponseNode(AuthNode,ret,err,code)
 
 	# decode PID
 	try:
@@ -370,7 +370,7 @@ def getResponseXML(AuthNodeData, ver, ac, asa):
 		err = '502' # invalid encryption of PID
 		code = 'INVALID_ENCRYPTION_PID'
 		actn = 'RETRY'
-		return prepareResponse(AuthNode,ret,err,code,actn)
+		return prepareResponseNode(AuthNode,ret,err,code,actn)
 
 	try:
 		if AuthNode.find('Data').get('type') == 'X':
@@ -380,17 +380,17 @@ def getResponseXML(AuthNodeData, ver, ac, asa):
 				ret = 'N'
 				err = '541' # invalid version of PID
 				code = 'INVALID_VERSION_PID'
-				return prepareResponse(AuthNode,ret,err,code)
+				return prepareResponseNode(AuthNode,ret,err,code)
 		else:
 			ret = 'N'
 			err = '511' # invalid PID format
 			code = 'INVALID_PID_FORMAT'
-			return prepareResponse(AuthNode,ret,err,code)
+			return prepareResponseNode(AuthNode,ret,err,code)
 	except:
 		ret = 'N'
 		err = '511' # invalid PID format
 		code = 'INVALID_PID_FORMAT'
-		return prepareResponse(AuthNode,ret,err,code)
+		return prepareResponseNode(AuthNode,ret,err,code)
 	# Calculate Hmac and match
 	try:
 		Hmac = decryptWithSession(skey, AuthNode.find('Hmac').text)
@@ -398,14 +398,14 @@ def getResponseXML(AuthNodeData, ver, ac, asa):
 		ret = 'N'
 		err = '503' # invalid encryption of Hmac
 		code = 'INVALID_ENCRYPTION_HMAC'
-		return prepareResponse(AuthNode,ret,err,code)
+		return prepareResponseNode(AuthNode,ret,err,code)
 
 	if sha256(PID).digest() != Hmac.strip():
 		ret = 'N'
 		err = '564' # hmac validation failed
 		code = 'HMAC_MISMATCH'
 		actn = "RETRY"
-		return prepareResponse(AuthNode,ret,err,code,actn)
+		return prepareResponseNode(AuthNode,ret,err,code,actn)
 
 	Rights = getLicenseRights(AuthNode)
 	ret,err,code = isUsesPidValid(AuthNode.find('Uses'), PIDNode,Rights , ResidentObj)
@@ -413,7 +413,7 @@ def getResponseXML(AuthNodeData, ver, ac, asa):
 	if ret == err== code == 'PASS':
 		pass
 	else:
-		return prepareResponse(AuthNode,ret,err,code)
+		return prepareResponseNode(AuthNode,ret,err,code)
 	# Does it require OTP Authentication as well ?
 	if AuthNode.find('Uses').get('otp')=='Y':
 		# Does it have permission for OTP
@@ -424,13 +424,13 @@ def getResponseXML(AuthNodeData, ver, ac, asa):
 		uid_hash = sha256(bytes(AuthNode.get('uid'),'utf-8')).hexdigest()
 
 		if s.get(uid_hash) is None:
-			return prepareResponse(AuthNode,'N','401','NO_OTP_GENERATED')
+			return prepareResponseNode(AuthNode,'N','401','NO_OTP_GENERATED')
 		if s.get(uid_hash).decode('utf-8') != PIDNode.find('Pv').get('otp'):
-			return prepareResponse(AuthNode,'N','400','INVALID_OTP_VALUE')
+			return prepareResponseNode(AuthNode,'N','400','INVALID_OTP_VALUE')
 
-	return prepareResponse(AuthNode,'Y','','OK')
+	return prepareResponseNode(AuthNode,'Y','','OK')
 
-def prepareResponse(AuthNode,ret,err,code,actn=""):
+def prepareResponseNode(AuthNode,ret,err,code,actn=""):
 	ts = currentISO8601()
 	if AuthNode is not None:
 		info = getInfo(AuthNode)
@@ -468,18 +468,18 @@ def prepareResponse(AuthNode,ret,err,code,actn=""):
 
 	return etree.tostring(AuthResNode)
 
-def prepare_response(AuthNodeData, ver, ac, asalk):
+def prepareResponseInit(AuthNodeData, ver, ac, asalk):
 	if asalk == "":
-		return prepareResponse(None,'N','942','UNSPECIFIED_ASA_CHANNEL')
+		return prepareResponseNode(None,'N','942','UNSPECIFIED_ASA_CHANNEL')
 	try:
 		asa = ASA.objects.get(asalk__exact=asalk)
 		if ac not in asa.Data['AUAList']:
-			return prepareResponse(None,'N','542','AUA_NOT_AUTHORIZED_BY_ASA')
+			return prepareResponseNode(None,'N','542','AUA_NOT_AUTHORIZED_BY_ASA')
 	except:
-		return prepareResponse(None,'N','942','UNSPECIFIED_ASA_CHANNEL')
+		return prepareResponseNode(None,'N','942','UNSPECIFIED_ASA_CHANNEL')
 	try:
 		AUA.objects.get(auaID__exact = ac)
 	except:
-		return prepareResponse(None,'N','543','AUA_DOES_NOT_EXIST')
+		return prepareResponseNode(None,'N','543','AUA_DOES_NOT_EXIST')
 	# Check if version
 	return getResponseXML(AuthNodeData,ver,ac,asa.asaID)
