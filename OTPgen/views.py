@@ -13,6 +13,7 @@ from django.conf import settings
 from smtplib import SMTP
 from urllib.request import HTTPCookieProcessor,build_opener
 from http.cookiejar import CookieJar
+from OpenCA import verify_chain
 
 class OTPGen(APIView):
 	'''
@@ -88,7 +89,7 @@ class OTPGen(APIView):
 			node.text = text
 		return node
 
-	def isSignatureValid(DS):
+	def isSignatureValid(self,DS):
 		if DS is None:
 			return False
 		else:
@@ -99,7 +100,7 @@ class OTPGen(APIView):
 	def getInfo(self,OtpNode):
 		return ''
 
-	def prepareResponse(self,OtpNode,ret,err,code,actn=""):
+	def prepareResponseNode(self,OtpNode,ret,err,code,actn=""):
 		ts = self.currentISO8601()
 		if OtpNode is not None:
 			info = self.getInfo(OtpNode)
@@ -117,24 +118,33 @@ class OTPGen(APIView):
 			ret = 'N'
 			err = '999' # Could not parse to XML
 			code = 'BAD_XML_OTP_NODE'
-			return self.prepareResponse(None,ret,err,code)
+			return self.prepareResponseNode(None,ret,err,code)
+
+		try:
+			AUA.objects.get(auaID__exact = ac)
+		except:
+			return self.prepareResponseNode(OtpNode,'N','401','AUA_DOES_NOT_EXIST')
 
 		if not (OtpNode.get('ver') == '1.6' == ver) :
 			ret = 'N'
 			err = '540' # Invalid Auth XML version
 			code = 'INVALID_OTP_XML_VERSION'
-			return self.prepareResponse(OtpNode,ret,err,code)
+			return self.prepareResponseNode(OtpNode,ret,err,code)
 			# If Authnode ac matches as of URL
 		if OtpNode.get('ac') != ac:
-			return self.prepareResponse(OtpNode,'N','999','MISMATCH_AC')
+			return self.prepareResponseNode(OtpNode,'N','999','MISMATCH_AC')
 			# If asa matches sa
 		if OtpNode.get('sa') != asa:
-			return self.prepareResponse(OtpNode,'N','999','MISMATCH_SA')
+			return self.prepareResponseNode(OtpNode,'N','999','MISMATCH_SA')
+
+		if not self.isSignatureValid(OtpNode.find('Signature').text):
+			return self.prepareResponseNode(OtpNode,'N','569','INVALID_SIGNATURE')
+
 		# Check if AUA can do OTP
 		aua = AUA.objects.get(auaID__exact = ac)
-		print(aua.Data['LicenseRights'])
+
 		if aua.Data['LicenseRights'][6] != '1':
-			return self.prepareResponse(OtpNode,'N','543','NOT_ALLOWED_TO_OTP')
+			return self.prepareResponseNode(OtpNode,'N','543','NOT_ALLOWED_TO_OTP')
 		# Check what does the AUA want
 		askedFor = OtpNode.find('Opts').get('ch')
 		# Check if aadhaar number exists
@@ -142,12 +152,12 @@ class OTPGen(APIView):
 			ResidentObj = Resident.objects.get(uid__exact = OtpNode.get('uid'))
 		except Exception as e:
 			# invalid aadhaar number
-			return self.prepareResponse(OtpNode,'N','998','INVALID_UID')
+			return self.prepareResponseNode(OtpNode,'N','998','INVALID_UID')
 			# Check if isVerified
 		if askedFor[0] == 1 and ResidentObj.isVerified[0] == 0:
-			return self.prepareResponse(OtpNode,'N','110','UID_DOES_NOT_HAVE_VERIFIED_PHONE')
+			return self.prepareResponseNode(OtpNode,'N','110','UID_DOES_NOT_HAVE_VERIFIED_PHONE')
 		if askedFor[1] == 1 and ResidentObj.isVerified[1] == 0:
-			return self.prepareResponse(OtpNode,'N','112','UID_DOES_NOT_HAVE_VERIFIED_MAIL')
+			return self.prepareResponseNode(OtpNode,'N','112','UID_DOES_NOT_HAVE_VERIFIED_MAIL')
 		# Compute hash of uid
 		uid_hash = sha256(bytes(OtpNode.get('uid'),'utf-8')).hexdigest()
 		# Passed all conditions generate OTP
@@ -158,25 +168,25 @@ class OTPGen(APIView):
 		# forward to whatever it askedFor
 		if askedFor[1] == '1':
 			if self.sendmailto(ResidentObj.email,otp,ac) == 'ERR: SENDMAIL':
-				return self.prepareResponse(OtpNode,'N','950','COULD_NOT_GENERATE_OTP_SEND_MAIL_FAIL')
+				return self.prepareResponseNode(OtpNode,'N','950','COULD_NOT_GENERATE_OTP_SEND_MAIL_FAIL')
 
 		if askedFor[0] == '1':
 			if self.sendSMSto(ResidentObj.phone[2:],otp,ac) == 'ERR: SENDMSG':
-				return self.prepareResponse(OtpNode,'N','950','COULD_NOT_GENERATE_OTP_SEND_MSG_FAIL')
+				return self.prepareResponseNode(OtpNode,'N','950','COULD_NOT_GENERATE_OTP_SEND_MSG_FAIL')
 
-		return self.prepareResponse(OtpNode,'Y','','OK')
+		return self.prepareResponseNode(OtpNode,'Y','','OK')
 
-	def prepare_response(self,AuthNodeData, ver, ac, asalk):
+	def prepare_response(self,OtpNodeData, ver, ac, asalk):
 		if asalk == "":
-			return self.prepareResponse(None,'N','942','UNSPECIFIED_ASA_CHANNEL')
+			return self.prepareResponseNode(None,'N','942','UNSPECIFIED_ASA_CHANNEL')
 		try:
 			asa = ASA.objects.get(asalk__exact=asalk)
 			if ac not in asa.Data['AUAList']:
-				return self.prepareResponse(None,'N','542','AUA_NOT_AUTHORIZED_BY_ASA')
+				return self.prepareResponseNode(None,'N','542','AUA_NOT_AUTHORIZED_BY_ASA')
 		except Exception as e:
-			return self.prepareResponse(None,'N','942','UNSPECIFIED_ASA_CHANNEL')
+			return self.prepareResponseNode(None,'N','942','UNSPECIFIED_ASA_CHANNEL')
 		# Check if version
-		return self.getResponseXML(AuthNodeData,ver,ac,asa.asaID)
+		return self.getResponseXML(OtpNodeData,ver,ac,asa.asaID)
 
 	def post(self,request,api_ver,auaID,uid_0,uid_1,asalk):
 		response = self.prepare_response(request.body, api_ver, auaID, asalk)

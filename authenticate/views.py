@@ -1,6 +1,6 @@
 from django.http import HttpResponse
 from .models import AUA,ASA
-from .prepareResponse import prepare_response
+from .prepareResponse import prepareResponseInit
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from json import loads
@@ -14,7 +14,7 @@ class AuthMain(APIView):
 	Authenticates a XML request from an ASA.
 	'''
 	def post(self,request,api_ver,auaID,uid_0,uid_1,asalk):
-		response = prepare_response(request.body,api_ver,auaID,asalk)
+		response = prepareResponseInit(request.body,api_ver,auaID,asalk)
 		return Response(response)
 
 class getLicenseKey(APIView):
