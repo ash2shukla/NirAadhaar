@@ -7,6 +7,7 @@ from time import time
 from datetime import datetime
 from lxml import etree
 from hashlib import sha256
+from bs4 import BeautifulSoup as BS
 from random import random
 from redis import StrictRedis
 from django.conf import settings
@@ -19,14 +20,14 @@ class OTPGen(APIView):
 	'''
 	Verifies the OTP request from ASA and generates OTP in SessionDB@2
 	'''
-	def sendmailto(self,to_id,otp,ac):
-		s = SMTP(settings.EMAIL_HOST, settings.EMAIL_PORT)
-		if settings.EMAIL_USE_TLS:
-			s.starttls()
+	def sendmailto(self,to_id,otp,ac_title):
 		try:
+			s = SMTP(settings.EMAIL_HOST, settings.EMAIL_PORT)
+			if settings.EMAIL_USE_TLS:
+				s.starttls()
 			# Login to smtp server
 			s.login(settings.EMAIL_HOST_USER, settings.EMAIL_HOST_PASSWORD)
-			s.sendmail(settings.EMAIL_HOST_USER, to_id,'Subject: {} Has asked for your NirAadhaar OTP\n\nYour OTP is {}.\n Valid for only 5 minutes.'.format(ac,otp))
+			s.sendmail(settings.EMAIL_HOST_USER, to_id,'Subject: {} Has asked for your NirAadhaar OTP\n\nYour OTP is {}.\n Valid for only 5 minutes.'.format(ac_title,otp))
 			s.quit()
 			return 'SUCCESS: SENDMAIL'
 		except Exception as e:
@@ -35,6 +36,7 @@ class OTPGen(APIView):
 	def sendSMSto(self,to_number,otp,ac):
 		url ='http://site24.way2sms.com/Login1.action?'
 		data = bytes('username=9818611161&password=123ashish&Submit=Sign+in','utf-8')
+		# 7988367320
 		cj= CookieJar()
 		opener = build_opener(HTTPCookieProcessor(cj))
 		opener.addheaders=[('User-Agent','Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2062.120')]
@@ -45,13 +47,20 @@ class OTPGen(APIView):
 
 		jession_id =str(cj).split('~')[1].split(' ')[0]
 		send_sms_url = 'http://site24.way2sms.com/smstoss.action?'
-		send_sms_data = bytes('ssaction=ss&Token='+jession_id+'&mobile='+to_number+'&message='+'Your Niraadhaar OTP requested by '+ac+' is '+otp+' .It will expire in 5 minutes.'+'&msgLen=136','utf-8')
+		send_sms_data = bytes('ssaction=ss&Token='+jession_id+'&mobile='+to_number+'&message='+'Your One Time Pass is '+otp+'&msgLen=136','utf-8')
+		print('SENT OTP IS',otp)
 		opener.addheaders=[('Referer', 'http://site25.way2sms.com/sendSMS?Token='+jession_id)]
 		try:
 			sms_sent_page = opener.open(send_sms_url,send_sms_data)
+			soup = BS(sms_sent_page.read())
+			errNode = soup.find('span',{'class':'err'})
+			if errNode:
+				print(errNode)
+				return "ERR: SENDMSG"
+			else:
+				return "SUCCESS: SENDMSG"
 		except IOError:
 			return "ERR: SENDMSG"
-
 		return "SUCCESS: SENDMSG"
 
 	def currentISO8601(self):
@@ -101,6 +110,9 @@ class OTPGen(APIView):
 		return ''
 
 	def prepareResponseNode(self,OtpNode,ret,err,code,actn=""):
+		'''
+		prepare Final Response Node's string.
+		'''
 		ts = self.currentISO8601()
 		if OtpNode is not None:
 			info = self.getInfo(OtpNode)
@@ -108,10 +120,14 @@ class OTPGen(APIView):
 		else:
 			info = ""
 			txn = ""
+
 		OtpResNode = self.createNode('OtpRes',['ret','code','txn','err','ts','actn','info'],[ret, code, txn, err, ts, actn, info])
 		return etree.tostring(OtpResNode)
 
 	def getResponseXML(self,OtpNodeData, ver, ac, asa):
+		'''
+		Validate the OtpXML node and invoke prepareResponse with parameters.
+		'''
 		try:
 			OtpNode = etree.fromstring(OtpNodeData)
 		except Exception as e:
@@ -166,17 +182,21 @@ class OTPGen(APIView):
 		s = StrictRedis(settings.SESSION_DB_URL,settings.SESSION_DB_PORT,settings.SESSION_DB)
 		s.set(uid_hash,otp,ex=300) # expire in 5 minutes
 		# forward to whatever it askedFor
+		print(askedFor)
 		if askedFor[1] == '1':
-			if self.sendmailto(ResidentObj.email,otp,ac) == 'ERR: SENDMAIL':
+			if self.sendmailto(ResidentObj.email,otp,aua.Data['CenterName']+', '+aua.Data['District']+', '+aua.Data['State']) == 'ERR: SENDMAIL':
 				return self.prepareResponseNode(OtpNode,'N','950','COULD_NOT_GENERATE_OTP_SEND_MAIL_FAIL')
 
 		if askedFor[0] == '1':
-			if self.sendSMSto(ResidentObj.phone[2:],otp,ac) == 'ERR: SENDMSG':
+			if self.sendSMSto(ResidentObj.phone[2:],otp,aua.Data['CenterName']+', '+aua.Data['District']+', '+aua.Data['State']) == 'ERR: SENDMSG':
 				return self.prepareResponseNode(OtpNode,'N','950','COULD_NOT_GENERATE_OTP_SEND_MSG_FAIL')
 
 		return self.prepareResponseNode(OtpNode,'Y','','OK')
 
-	def prepare_response(self,OtpNodeData, ver, ac, asalk):
+	def prepareResponseInit(self,OtpNodeData, ver, ac, asalk):
+		'''
+		Validate ASA, AUA and invoke getResponseXML.
+		'''
 		if asalk == "":
 			return self.prepareResponseNode(None,'N','942','UNSPECIFIED_ASA_CHANNEL')
 		try:
@@ -189,5 +209,5 @@ class OTPGen(APIView):
 		return self.getResponseXML(OtpNodeData,ver,ac,asa.asaID)
 
 	def post(self,request,api_ver,auaID,uid_0,uid_1,asalk):
-		response = self.prepare_response(request.body, api_ver, auaID, asalk)
+		response = self.prepareResponseInit(request.body, api_ver, auaID, asalk)
 		return Response(response)

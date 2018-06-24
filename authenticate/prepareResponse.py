@@ -8,6 +8,7 @@ from OpenSSL.crypto import load_privatekey, FILETYPE_PEM, load_certificate
 from base64 import b64decode,b64encode
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import AES
+from Crypto import Random
 from re import sub
 from Levenshtein import jaro
 from redis import StrictRedis
@@ -47,6 +48,15 @@ def currentISO8601():
 	_time = ':'.join([hour,minute,second])
 
 	return date+"T"+_time
+
+def encryptWithSkey(AuthNode, text):
+	_AES256key = decryptSkey(AuthNode)
+
+	if ((_AES256key != "") and (text !="")):
+		padded = text + bytes((32 - len(text) % 32) * chr(32 - len(text) % 32),'utf-8')
+		iv = Random.new().read(AES.block_size)
+		cipher = AES.new(_AES256key, AES.MODE_CBC, iv)
+		return b64encode(iv + cipher.encrypt(padded))
 
 def decryptSkey(AuthNode):
 	aua = AuthNode.get('ac')
@@ -122,10 +132,10 @@ def ISOToDatetime(ts):
 	return datetime(int(parts_0[0]),int(parts_0[1]),int(parts_0[2]),int(parts_1[0]),int(parts_1[1]),int(parts_1[2]))
 
 def ISOTimeDiff(ts1,ts2):
-	return abs(ISOToDatetime(ts1) - ISOToDatetime(ts2)).total_seconds()
+	return int(abs(ISOToDatetime(ts1) - ISOToDatetime(ts2)).total_seconds())
 
 def isUsesPidValid(UsesNode, PIDNode, Rights, ResidentObj):
-	if ISOTimeDiff(PIDNode.get('ts'),currentISO8601())<300: # If request is older than 5 mins
+	if ISOTimeDiff(PIDNode.get('ts'),currentISO8601()) >300: # If request is older than 5 mins
 		return 'N','561','REQUEST_EXPIRED'
 	valid_dict = {
 	'IIR':['LEFT_IRIS','RIGHT_IRIS'],\
@@ -303,7 +313,7 @@ def isUsesPidValid(UsesNode, PIDNode, Rights, ResidentObj):
 
 	return 'PASS','PASS','PASS'
 
-def getResponseXML(AuthNodeData, ver, ac, asa):
+def getResponseXML(AuthNodeData, ver, ac, asa,is_kyc=False):
 	try:
 		AuthNode = etree.fromstring(AuthNodeData)
 	except:
@@ -312,26 +322,32 @@ def getResponseXML(AuthNodeData, ver, ac, asa):
 		code = 'BAD_XML_AUTH_NODE'
 		return prepareResponseNode(None,ret,err,code)
 
-	if not (AuthNode.get('ver') == '1.6' == ver) :
-		ret = 'N'
-		err = '540' # Invalid Auth XML version
-		code = 'INVALID_AUTH_XML_VERSION'
-		return prepareResponseNode(AuthNode,ret,err,code)
-	else:
-		# If Authnode ac matches as of URL
-		if AuthNode.get('ac') != ac:
-			return prepareResponseNode(AuthNode,'N','999','MISMATCH_AC')
-		# If asa matches sa
-		if AuthNode.get('sa') != asa:
-			return prepareResponseNode(AuthNode,'N','999','MISMATCH_SA')
-		# Check if aadhaar number exists
-		try:
-			ResidentObj = Resident.objects.get(uid__exact = AuthNode.get('uid'))
-		except:
+	if not is_kyc:
+		if not (AuthNode.get('ver') == '1.6' == ver):
 			ret = 'N'
-			err = '998' # invalid aadhaar number
-			code = 'INVALID_UID'
+			err = '540' # Invalid Auth XML version
+			code = 'INVALID_AUTH_XML_VERSION'
 			return prepareResponseNode(AuthNode,ret,err,code)
+	else:
+		if not (AuthNode.get('ver') == '1.6'):
+			ret = 'N'
+			err = '540' # Invalid Auth XML version
+			code = 'INVALID_AUTH_XML_VERSION'
+			return prepareResponseNode(AuthNode,ret,err,code)
+	# If Authnode ac matches as of URL
+	if AuthNode.get('ac') != ac:
+		return prepareResponseNode(AuthNode,'N','999','MISMATCH_AC')
+	# If asa matches sa
+	if AuthNode.get('sa') != asa:
+		return prepareResponseNode(AuthNode,'N','999','MISMATCH_SA')
+	# Check if aadhaar number exists
+	try:
+		ResidentObj = Resident.objects.get(uid__exact = AuthNode.get('uid'))
+	except:
+		ret = 'N'
+		err = '998' # invalid aadhaar number
+		code = 'INVALID_UID'
+		return prepareResponseNode(AuthNode,ret,err,code)
 
 	if not isSignatureValid(AuthNode.find('Signature').text):
 		ret = 'N'
@@ -422,7 +438,6 @@ def getResponseXML(AuthNodeData, ver, ac, asa):
 		# Connect with the cacheDB (redis @ 2) and fetch the latest OTP corresponding to hash of UID
 		s = StrictRedis(host='localhost',port=6379,db=2)
 		uid_hash = sha256(bytes(AuthNode.get('uid'),'utf-8')).hexdigest()
-
 		if s.get(uid_hash) is None:
 			return prepareResponseNode(AuthNode,'N','401','NO_OTP_GENERATED')
 		if s.get(uid_hash).decode('utf-8') != PIDNode.find('Pv').get('otp'):

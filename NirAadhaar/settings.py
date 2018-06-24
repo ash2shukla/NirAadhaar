@@ -28,7 +28,8 @@ EMAIL_HOST_PASSWORD = '!23ashish'
 
 PVT_DIR = "AUAPrivateKeyFiles"
 
-CERT_CHAIN_PATH = os.path.join(BASE_DIR,'NirAadhaar-INT-CA/certs/NirAadhaar-INT-CA.chain.pem')
+CERT_CHAIN_PATH = os.path.join(BASE_DIR, 'NirAadhaar-INT-CA/certs/NirAadhaar-INT-CA.chain.pem')
+
 ##########################################################################
 
 

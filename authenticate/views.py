@@ -7,6 +7,7 @@ from json import loads
 from time import time
 from lxml import etree
 from hashlib import sha256
+import logging
 
 
 class AuthMain(APIView):
@@ -14,6 +15,8 @@ class AuthMain(APIView):
 	Authenticates a XML request from an ASA.
 	'''
 	def post(self,request,api_ver,auaID,uid_0,uid_1,asalk):
+		logger = logging.getLogger(__name__)
+		logger.info('ting tong')
 		response = prepareResponseInit(request.body,api_ver,auaID,asalk)
 		return Response(response)
 
@@ -40,5 +43,6 @@ class getLicenseKey(APIView):
 			auaObj.save()
 			return Response(LK)
 		except Exception as e:
+			print(e)
 			# AUA was not registered
 			return Response('NA_AUA')
