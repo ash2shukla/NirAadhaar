@@ -1,0 +1,18 @@
+version: '2'
+
+services:
+  postgresql:
+    image: 'bitnami/postgresql:latest'
+    ports:
+      - '5432:5432'
+    environment:
+      - POSTGRESQL_USERNAME=niraadhaar_admin
+      - POSTGRESQL_PASSWORD=niraadhaar_pass
+      - POSTGRESQL_DATABASE=niraadhaardb
+  redis:
+    image: 'bitnami/redis:latest'
+    ports:
+      - '6379:6379'
+    environment:
+      - REDIS_PASSWORD=mock_pass
+      - DISABLE_COMMANDS=FLUSHDB,FLUSHALL,CONFIG

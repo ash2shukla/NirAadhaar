@@ -1,0 +1,27 @@
+{
+	"uid" : "",
+	"name" : "",
+	"lname" : "",
+	"gender" : "",
+	"dob" : "",
+	"dobt" : "",
+	"age" : "",
+	"phone":"",
+	"email":"",
+	"lang" : "",
+	"co":"",
+	"house": "",
+	"street": "",
+	"lco": "",
+	"lm":"",
+	"vtc": "",
+	"dist": "",
+	"subdist":"",
+	"state": "",
+	"pc": "",
+	"po": "",
+	"av" :"",
+	"lav" :"",
+
+	"bio_dict" : {}
+}

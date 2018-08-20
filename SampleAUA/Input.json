@@ -1,0 +1,30 @@
+{
+	"uid" : "903298497974",
+	"name" : "Ashish Shukla",
+	"lname" : "आशीष शुक्ला",
+	"gender" : "M",
+	"dob" : "1996",
+	"dobt" : "V",
+	"age" : "22",
+	"phone":"919818611161",
+	"email":"ash2shukla@gmail.com",
+	"lang" : "06",
+	"co":"S/O Vidya Dhar Shukla",
+	"house": "520",
+	"street": "Raybareli Road",
+	"lco": "विद्याधर शुक्ला",
+	"lm":"",
+	"vtc": "C",
+	"dist": "Unnao",
+	"subdist":"Unnao City",
+	"state": "Uttar Pradesh",
+	"pc": "209801",
+	"po": "Unnao",
+	"av" :"",
+	"lav" :"",
+
+	"bio_dict" : {
+					"FMR":{"LEFT_THUMB":"ABCD5","RIGHT_THUMB":"EFGH5"},
+					"IIR":{"LEFT_IRIS":"ABCDEFGH"}
+				}
+}
